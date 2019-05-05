@@ -1143,13 +1143,34 @@ sub _function_add_period {
     $self->_push(_check_type_warnings() ? '""' : $arg);
 }
 
-sub _function_arith {
+sub _function_arith_deprecated {
     my ($self, $token) = @_;
 
     # We can use builtin eval for these functions
     my $arg1 = $self->_pop(i => $token, 1);
     my $arg2 = $self->_pop(i => $token);
     $self->_push(_check_type_warnings() ? 0 : eval "0+($arg2 $token $arg1)");
+}
+
+sub _function_arith {
+    my ($self, $token) = @_;
+    
+    my $arg1 = $self->_pop( i => $token, 1 );
+    my $arg2 = $self->_pop( i => $token );
+    my $result = 0;
+    if ($token =~ '[*<>+-]') {
+      $result = 1 if $arg2 > $arg1 and $token eq '>';
+      $result = 1 if $arg2 < $arg1 and $token eq '<';
+
+      $result = 0 + $arg2 + $arg1 if $token eq '+';
+      $result = 0 + $arg2 - $arg1 if $token eq '-';
+      $result = 0 + $arg2 * $arg1 if $token eq '*';
+
+      $self->_push(_check_type_warnings() ? 0 : $result);
+    }
+    else {
+      $self->_warning("UNSUPPORTED TOKEN $token");
+    }
 }
 
 sub _function_assign {
