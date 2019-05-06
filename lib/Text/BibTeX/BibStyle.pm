@@ -1,4 +1,4 @@
-package Text::BibTeX::BibStyle;
+package Text::BibTeX::BibStyle v0.0.4;
 
 =head1 NAME
 
@@ -6,7 +6,7 @@ Text::BibTeX::BibStyle - Format Text::BibTeX::Entry items using .bst
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 DESCRIPTION
 
@@ -512,7 +512,7 @@ C<replace_bibstyle> method.
     );
 
     sub execute : method {
-      my ($self, $bibfiles_ar, $cites_ar) = @_;
+      my ($self, $bibfiles_ar, $rawbib, $cites_ar) = @_;
 
       croak
         "No bibstyle interpreter has been defined: call read_bibstyle or replace_bibstyle first"
@@ -520,6 +520,7 @@ C<replace_bibstyle> method.
 
       $self->{bibtex} = {
         bibfiles   => $bibfiles_ar,
+        rawbib     => $rawbib,
         bt_entry   => undef,
         bt_entries => {},
         cite       => undef,
@@ -618,12 +619,15 @@ defined.
   sub read_bibstyle : method {
     my ($self, $bibstyle) = @_;
 
-    my $f    = "$bibstyle.bst";
-    my $path = $ENV{BSTINPUTS} || '.';
-    my @path = split /:/, $path;
-    my ($dir) = grep -f "$_/$f", @path;
-    croak("Cannot find $f on path: $path") unless $dir;
-    my $fullfile = "$dir/$f";
+    # my $f    = "$bibstyle.bst";
+    # my $path = $ENV{BSTINPUTS} || '.';
+    # my @path = split /:/, $path;
+    # my ($dir) = grep -f "$_/$f", @path;
+    # croak("Cannot find $f on path: $path") unless $dir;
+    # my $fullfile = "$dir/$f";
+
+    my $fullfile = "$bibstyle";
+    croak("Cannot find bst file $bibstyle") unless -e $bibstyle;
 
     # Read the file
     open BSTINPUTS, "$fullfile" or croak("$fullfile: $!");
@@ -976,6 +980,71 @@ under the same terms as Perl itself.
     sub _command_read {
       my ($self, $cmd, $filename, $lineno, $args_ar) = @_;
 
+      # print "COMMAND_READ $cmd, $filename, $lineno \n";
+
+      if ($self->{bibtex}{rawbib} && $self->{bibtex}{rawbib} ne '') {
+        $self->_read_from_raw($cmd, $filename, $lineno, $args_ar);
+      }
+      else {
+        $self->_read_from_files($cmd, $filename, $lineno, $args_ar);
+      }
+
+    }    ##### sub _command_read {
+
+    sub _read_from_raw {
+      my ($self, $cmd, $filename, $lineno, $args_ar) = @_;
+
+      # print "COMMAND_READ _read_from_raws \n";
+
+      croak "$self->{lineno}: I found no rawbib content"
+        unless $self->{bibtex}{rawbib} && $self->{bibtex}{rawbib} ne '';
+
+      my @cites;
+
+      my $bt_entry = new Text::BibTeX::Entry();
+      $bt_entry->parse_s($self->{bibtex}{rawbib});
+      croak "Paring went shitty" unless $bt_entry->parse_ok;
+
+      my $metatype = $bt_entry->metatype;
+      if ($metatype == BTE_REGULAR) {
+
+        my $key = $bt_entry->key;
+
+  # print "_read_from_raw: Processing raw Entry metatype $metatype key $key \n";
+
+        # next unless $cites{$key} || $cite_all;
+        push @cites, $key;    # if $cite_all && !$cited{$key}++;
+        $self->{bibtex}{bt_entries}{$key} = $bt_entry;
+
+        # Create an entry hash for this entry
+        my $entry = {};
+        $entry->{field}{$_}
+          = $bt_entry->exists($_) ? ('"' . $bt_entry->get($_) . '"') : undef
+          foreach @{$self->{bibtex}{format}{field}};
+        $entry->{field}{crossref} = lc $entry->{field}{crossref}
+          if defined $entry->{field}{crossref};
+        $entry->{integer}{$_} = "-0"    # 0?
+          foreach @{$self->{bibtex}{format}{integer}};
+        $entry->{string}{$_} = undef foreach @{$self->{bibtex}{format}{string}};
+        $self->{bibtex}{entries}{$key} = $entry;
+      }
+      elsif ($metatype == BTE_PREAMBLE) {
+        push @{$self->{bibtex}{preamble}}, $bt_entry->value;
+      }
+      elsif ($metatype == BTE_MACRODEF) {
+
+        # These are handled internally by Text::BibTeX
+      }
+      $self->{bibtex}{cites} = \@cites;    # if $cite_all;
+      croak "$self->{lineno} I found no citations"
+        unless @{$self->{bibtex}{cites}};
+    }
+
+    sub _read_from_files {
+      my ($self, $cmd, $filename, $lineno, $args_ar) = @_;
+
+      # print "COMMAND_READ _read_from_files \n";
+
       croak "$self->{lineno}: I found no bib files"
         unless $self->{bibtex}{bibfiles} && @{$self->{bibtex}{bibfiles}};
 
@@ -1035,6 +1104,10 @@ under the same terms as Perl itself.
       $self->{bibtex}{cites} = \@cites if $cite_all;
       croak "$self->{lineno} I found no citations"
         unless @{$self->{bibtex}{cites}};
+    }
+
+    sub _process_entry {
+
     }
 
     sub _command_sort {
