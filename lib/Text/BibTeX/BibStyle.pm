@@ -1,4 +1,4 @@
-package Text::BibTeX::BibStyle v0.0.4;
+package Text::BibTeX::BibStyle;
 
 =head1 NAME
 
@@ -421,9 +421,9 @@ Boolean to force the standard bibtex wrapping on the output.
       # Handle accents
       $text =~ s/\\i\b/i/g;
       $text =~ s/(\{ \\ ($Acc_char|$Acc_let\b) [ ]* ([a-zA-Z]+) [ ]*
-	    (?:\}|\Z))/_character($self, $opts, $1, $3, $2)/exog;
+	      (?:\}|\Z))/_character($self, $opts, $1, $3, $2)/exog;
       $text =~ s/(\\ ($Acc_char|$Acc_let) [ ]* \{ [ ]* ([a-zA-Z]+) [ ]*
-	    (?:\}|\Z))/_character($self, $opts, $1, $3, $2)/exog;
+	      (?:\}|\Z))/_character($self, $opts, $1, $3, $2)/exog;
       $text =~ s/($Acc_sym)/_character($self, $opts, $1, $1)/exog;
       $text =~ s/(\\ ([\#\$\%&_]))/_character($self, $opts, $1, $2)/xge;
       $text =~ s!(\\/)!_character($self, $opts, $1, '')!ge;
@@ -439,31 +439,31 @@ Boolean to force the standard bibtex wrapping on the output.
 
       # Handle text styles
       1 while $text =~ s/(\{ $Style .*)/do {
-	    my ($latex, $next) = _remove_matched_brace($1);
-	    (my $text = $latex) =~ s!\{ ($Style) [ ]*(.*) \}$!$2!sx;
-	    my $style = $1;
-	    $style =~ m!([a-z]+)!;
-	    $opts->{style}->($self, $latex, $1, $text) . $next;
-	}/sexg;
+        my ($latex, $next) = _remove_matched_brace($1);
+        (my $text = $latex) =~ s!\{ ($Style) [ ]*(.*) \}$!$2!sx;
+        my $style = $1;
+        $style =~ m!([a-z]+)!;
+        $opts->{style}->($self, $latex, $1, $text) . $next;
+      }/sexg;
     }
     if ($opts->{command}) {
       1 while $text =~ s/(\A|[^\\])\\([a-z]+)(.*)/do {
-	    my ($pre, $cmd, $next) = ($1, $2, $3);
-	    my @args;
-	    while ($next =~ m!^[\{\[]!) {
-		if ($next =~ m!^\{!) {
-		    my $arg;
-		    ($arg, $next) = _remove_matched_brace($next);
-		    $arg =~ s!^\{ (.*) \}$!$1!sx;
-		    push @args, $arg;
-		}
-		else {
-		    $next =~ s!^\[ (.*?) \]!!sx;
-		    push @args, $1;
-		}
-	    }
-	    $pre . $opts->{command}->($self, $cmd, @args) . $next;
-	}/exis;
+        my ($pre, $cmd, $next) = ($1, $2, $3);
+        my @args;
+        while ($next =~ m!^[\{\[]!) {
+          if ($next =~ m!^\{!) {
+              my $arg;
+              ($arg, $next) = _remove_matched_brace($next);
+              $arg =~ s!^\{ (.*) \}$!$1!sx;
+              push @args, $arg;
+          }
+          else {
+              $next =~ s!^\[ (.*?) \]!!sx;
+              push @args, $1;
+          }
+        }
+        $pre . $opts->{command}->($self, $cmd, @args) . $next;
+      }/exis;
     }
     if ($opts->{delete_braces}) {
 
@@ -513,6 +513,7 @@ C<replace_bibstyle> method.
 
     sub execute : method {
       my ($self, $bibfiles_ar, $rawbib, $cites_ar) = @_;
+
 
       croak
         "No bibstyle interpreter has been defined: call read_bibstyle or replace_bibstyle first"
@@ -619,20 +620,30 @@ defined.
   sub read_bibstyle : method {
     my ($self, $bibstyle) = @_;
 
-    # my $f    = "$bibstyle.bst";
-    # my $path = $ENV{BSTINPUTS} || '.';
-    # my @path = split /:/, $path;
-    # my ($dir) = grep -f "$_/$f", @path;
-    # croak("Cannot find $f on path: $path") unless $dir;
-    # my $fullfile = "$dir/$f";
+    my $fullfile;
 
-    my $fullfile = "$bibstyle";
-    croak("Cannot find bst file $bibstyle") unless -e $bibstyle;
+    if (-e $bibstyle) {
+      $fullfile = "$bibstyle";
+    }
+    elsif (-e "$bibstyle" . ".bst") {
+      $fullfile = "$bibstyle" . ".bst";
+    }
+    else {
+      my $f    = "$bibstyle.bst";
+      my $path = $ENV{BSTINPUTS} || '.';
+      my @path = split /:/, $path;
+      my ($dir) = grep -f "$_/$f", @path;
+
+      croak("Cannot find bst file $bibstyle. Cannot find $f on path: $path")
+        unless $dir;
+
+      $fullfile = "$dir/$f";
+    }
 
     # Read the file
-    open BSTINPUTS, "$fullfile" or croak("$fullfile: $!");
-    my @bibstyle = <BSTINPUTS>;
-    close BSTINPUTS;
+    open(my $BSTINPUTS, '<', "$fullfile") or croak("$fullfile: $!");
+    my @bibstyle = <$BSTINPUTS>;
+    close $BSTINPUTS;
 
     my $interp = join '', @bibstyle;
     $self->replace_bibstyle($interp, $fullfile);
@@ -985,16 +996,16 @@ under the same terms as Perl itself.
       if ($self->{bibtex}{rawbib} && $self->{bibtex}{rawbib} ne '') {
         $self->_read_from_raw($cmd, $filename, $lineno, $args_ar);
       }
-      else {
+      elsif ($self->{bibtex}{bibfiles} && $self->{bibtex}{bibfiles} ne '') {
         $self->_read_from_files($cmd, $filename, $lineno, $args_ar);
       }
-
-    }    ##### sub _command_read {
+      else {
+        croak "$self->{lineno}: I found no bib files and no raw bibtex entries";
+      }
+    }
 
     sub _read_from_raw {
       my ($self, $cmd, $filename, $lineno, $args_ar) = @_;
-
-      # print "COMMAND_READ _read_from_raws \n";
 
       croak "$self->{lineno}: I found no rawbib content"
         unless $self->{bibtex}{rawbib} && $self->{bibtex}{rawbib} ne '';
@@ -1009,8 +1020,6 @@ under the same terms as Perl itself.
       if ($metatype == BTE_REGULAR) {
 
         my $key = $bt_entry->key;
-
-  # print "_read_from_raw: Processing raw Entry metatype $metatype key $key \n";
 
         # next unless $cites{$key} || $cite_all;
         push @cites, $key;    # if $cite_all && !$cited{$key}++;
@@ -1066,8 +1075,10 @@ under the same terms as Perl itself.
         die "Cannot find $f on path: $path" unless $dir;
         my $dirfile = "$dir/$f";
         my $bibfile = Text::BibTeX::File->new($dirfile) or die "$dirfile: $!\n";
+
         while (my $bt_entry = new Text::BibTeX::Entry $bibfile) {
           next unless $bt_entry->parse_ok;
+
           my $metatype = $bt_entry->metatype;
           if ($metatype == BTE_REGULAR) {
 
@@ -1100,14 +1111,9 @@ under the same terms as Perl itself.
           }
         }
       }
-
       $self->{bibtex}{cites} = \@cites if $cite_all;
       croak "$self->{lineno} I found no citations"
         unless @{$self->{bibtex}{cites}};
-    }
-
-    sub _process_entry {
-
     }
 
     sub _command_sort {
@@ -1258,10 +1264,11 @@ under the same terms as Perl itself.
     my $have_sym if $sym =~ s/^\'//;
     my ($type) = grep(exists $self->{symbols}{$_}{$sym},
       qw(entry_int entry_str integer string));
-    my $val_type = !$have_sym ? 'si' : $type =~ /str/ ? 's' : 'i';
+    my $val_type = !defined $have_sym ? 'si' : $type =~ /str/ ? 's' : 'i';
     my $val = $self->_pop($val_type => $token);
     my $bad_arg = _check_type_warnings();
     return if $bad_arg;
+
     if (!$type) {
       $self->_warning("Undefined variable '$sym'");
     }
@@ -1981,7 +1988,7 @@ sub _trim_string {
     # Find the matching brace
     my $nest = 1;
     my @char = ($1);
-    1 while $str =~ s/^(.*?)([{}])/do {
+    1 while $str =~ s/^(.*?)([{}])/ do {
 	$nest += $2 eq '{' ? 1 : -1;
 	push @char, $1, $2;
 	'' } /es && $nest > 0;
@@ -2223,29 +2230,29 @@ sub _trim_string {
 
     my %command;
     1 while $str =~ s/\\newcommand\{ \\([a-z]+) \} \[ (\d+) \](\{.*)/do {
-	my ($cmd, $args, $next, $def) = ($1, $2, $3);
-	($def, $next) = _remove_matched_brace($next);
-	$def =~ s!^\{(.*)\}$!sub { qq(\Q$1\E) }!s;
-	$def =~ s!\\\#(\d+)!\$_[@{[$1-1]}]!g;
-	my $sub = eval("$def");
-	die "Internal error: $@" if $@;
-	$command{$cmd} = { args => $args, def => $def, code => $sub };
-	$next;
+	    my ($cmd, $args, $next, $def) = ($1, $2, $3);
+	    ($def, $next) = _remove_matched_brace($next);
+	    $def =~ s!^\{(.*)\}$!sub { qq(\Q$1\E) }!s;
+	    $def =~ s!\\\#(\d+)!\$_[@{[$1-1]}]!g;
+	    my $sub = eval("$def");
+	    die "Internal error: $@" if $@;
+	    $command{$cmd} = { args => $args, def => $def, code => $sub };
+	    $next;
     }/sexi;
 
     if (%command) {
       my $cmd_re = join '|', keys %command;
       1 while $str =~ s/\\($cmd_re)(\{.*)/do {
-	    my ($cmd, $next) = ($1, $2);
-	    my @args;
-	    for (my $i=0; $i < $command{$cmd}{args}; $i++) {
-		my ($arg, $next_) = _remove_matched_brace($next);
-		$arg =~ s!^\{(.*)\}$!$1!s;
-		push @args, $arg;
-		$next = $next_;
-	    }
-	    &{$command{$cmd}{code}}(@args) . $next;
- 	}/se;
+        my ($cmd, $next) = ($1, $2);
+        my @args;
+        for (my $i=0; $i < $command{$cmd}{args}; $i++) {
+          my ($arg, $next_) = _remove_matched_brace($next);
+          $arg =~ s!^\{(.*)\}$!$1!s;
+          push @args, $arg;
+          $next = $next_;
+        }
+        &{$command{$cmd}{code}}(@args) . $next;
+      }/se;
     }
 
     return $str;
